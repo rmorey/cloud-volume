@@ -4,9 +4,10 @@ from typing import Optional, Union
 
 import multiprocessing as mp
 import numpy as np
+import mrcfile
 
 from .exceptions import UnsupportedFormatError, DimensionError
-from .lib import generate_random_string
+from .lib import generate_random_string, Bbox
 from .paths import strict_extract, to_https_protocol
 from .types import CompressType, ParallelType, CacheType, SecretsType
 
@@ -296,3 +297,59 @@ class CloudVolume:
     # save the numpy array
     vol[:,:,:] = arr
     return vol
+
+
+  @classmethod
+  def from_mrc(cls, 
+    mrc_filepath,
+    vol_path, 
+    chunk_size=(1024,1024,1),
+    voxel_offset=(0,0,0)
+    ):
+    """
+    Create a new dataset from a MRC file.
+    See: https://www.ccpem.ac.uk/mrc_format/mrc2014.php for more information
+
+    Required:
+      mrc_filepath: Path to the MRC file.
+      vol_path: Destination path for the CloudVolume dataset.
+    """
+    # This is intended to handle MRC files larger than the memory capacity
+    # of a single machine, so we use the memory-mapped functionaltiy of 
+    # mrcfile to lazy-load the file. 
+    mrc = mrcfile.mmap(mrc_filepath)
+
+    # MRC format has ZXY order, but CloudVolume expects XYZ order
+    z_dim, x_dim, y_dim = mrc.data.shape
+    volume_size = (x_dim, y_dim, z_dim)
+
+    # Resolution in an MRC file is in angstroms, so we convert to nanometers
+    voxel_size = mrc.voxel_size
+    resolution = (voxel_size['x'].item()/10, voxel_size['y'].item()/10, voxel_size['z'].item()/10)
+
+    info = CloudVolume.create_new_info(
+        num_channels    = 1,
+        layer_type      = 'image',
+        data_type       = mrc.data.dtype.name,
+        encoding        = 'raw',
+        resolution      = resolution,
+        voxel_offset    = voxel_offset, 
+        chunk_size      = chunk_size,
+        volume_size     = volume_size, 
+    )
+    vol = CloudVolume(vol_path, info=info)
+    vol.commit_info()
+    vol.provenance.processing.append({
+      'method': 'from_mrc',
+      'date': time.strftime('%Y-%m-%d %H:%M %Z')
+    })
+    vol.commit_provenance()
+
+    # Upload the volume section by section
+    # TODO: make faster
+    for z in range(z_dim):
+        img = mrc.data[z, :, :]
+        while img.ndim < 4:
+            img = img[..., np.newaxis]
+        bbx = Bbox((0, 0, z), (x_dim, y_dim, z+1))
+        vol[bbx] = img
