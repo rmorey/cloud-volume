@@ -355,3 +355,5 @@ class CloudVolume:
             img = img[..., np.newaxis]
         bbx = Bbox((0, 0, z), (x_dim, y_dim, z+1))
         vol[bbx] = img
+    
+    return vol
