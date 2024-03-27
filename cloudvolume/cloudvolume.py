@@ -329,7 +329,7 @@ class CloudVolume:
     voxel_size = mrc.voxel_size
     resolution = (voxel_size['x'].item()/10, voxel_size['y'].item()/10, voxel_size['z'].item()/10)
 
-    info = CloudVolume.create_new_info(
+    info = cls.create_new_info(
         num_channels    = 1,
         layer_type      = 'image',
         data_type       = mrc.data.dtype.name,
