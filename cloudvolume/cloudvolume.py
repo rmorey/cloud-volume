@@ -321,6 +321,8 @@ class CloudVolume:
 
     # MRC format has ZXY order, but CloudVolume expects XYZ order
     z_dim, x_dim, y_dim = mrc.data.shape
+
+    # TODO: make chunk multiple?
     volume_size = (x_dim, y_dim, z_dim)
 
     # Resolution in an MRC file is in angstroms, so we convert to nanometers
